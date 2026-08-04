@@ -19,23 +19,21 @@ print('\n--- Initial Descriptive Statistics ---\n')
 display(df.describe())
 
 # --- Data Sampling to prevent Out-of-Memory Errors ---
-# The dataset is very large (6.3 million rows), and one-hot encoding several categorical features
-# can quickly lead to an 'Out of Memory' error in Colab's environment. To mitigate this,
-# we will sample a subset of the data for processing and model training.
-sample_fraction = 0.1 # Sample 10% of the data
+# Sample 10% of the data to mitigate 'Out of Memory' errors for large datasets.
+sample_fraction = 0.1 
 df = df.sample(frac=sample_fraction, random_state=42).reset_index(drop=True)
 print(f'\n--- Dataset sampled to {sample_fraction*100}% (new shape: {df.shape}) ---\n')
 
 # --- Feature Engineering: Adding New Categorical Columns ---
 
-# Pre-generated list of 15 sample customer names (reduced for memory efficiency)
+# Pre-generated list of 15 sample customer names
 customer_names_list = [
     "Alice Smith", "Bob Johnson", "Charlie Brown", "Diana Prince", "Ethan Hunt",
     "Fiona Gallagher", "George Costanza", "Hannah Montana", "Ivy Lee", "Jack Sparrow",
     "Karen Miller", "Liam Gallagher", "Mia Wallace", "Noah Davis", "Olivia White"
 ]
 
-# Pre-generated list of 15 merchant names (mix of genuine and fraud merchants, reduced for memory efficiency)
+# Pre-generated list of 15 merchant names
 merchant_names_list = [
     "Global Solutions Inc.", "Tech Innovations Ltd.", "Creative Designs Co.", "Rapid Delivery Corp.",
     "Elite Consulting Group", "EasyCash Loans", "FastFunds Now", "Instant Wealth Inc.",
@@ -44,7 +42,7 @@ merchant_names_list = [
 ]
 random.shuffle(merchant_names_list)
 
-# Pre-generated list of 15 expense categories (reduced for memory efficiency)
+# Pre-generated list of 15 expense categories
 expense_categories_list = [
     "Groceries", "Electronics", "Dining Out", "Clothing", "Fuel",
     "Healthcare", "Entertainment", "Online Shopping", "Financial Services", "Gambling",
@@ -52,7 +50,7 @@ expense_categories_list = [
 ]
 random.shuffle(expense_categories_list)
 
-# Pre-generated list of 15 locations (cities and countries, reduced for memory efficiency)
+# Pre-generated list of 15 locations
 locations_list = [
     "New York, US", "London, GB", "Tokyo, JP", "Paris, FR", "Berlin, DE",
     "Sydney, AU", "Toronto, CA", "Rome, IT", "Madrid, ES", "Beijing, CN",
@@ -66,13 +64,9 @@ df['generated_merchant_name'] = np.random.choice(merchant_names_list, size=len(d
 df['expense_category'] = np.random.choice(expense_categories_list, size=len(df))
 df['sender_location'] = np.random.choice(locations_list, size=len(df))
 
-# Vectorized assignment for receiver_location with 20% chance of being different
-df['receiver_location'] = df['sender_location'] # Default to matching sender_location (80% case)
-
-# Create a mask for the 20% of rows where receiver_location should be different
-mask_different_location = np.random.rand(len(df)) < 0.2
-
-# For the rows in the mask, assign a different location
+# Assign receiver_location, with 20% chance of being different from sender_location
+df['receiver_location'] = df['sender_location'] # Default to matching
+mask_different_location = np.random.rand(len(df)) < 0.2 # Mask for 20% different
 df.loc[mask_different_location, 'receiver_location'] = np.random.choice(locations_list, size=mask_different_location.sum())
 
 print("\n--- DataFrame with new generated feature columns (first 10 rows) ---\n")
@@ -80,16 +74,15 @@ display(df[['generated_customer_name', 'generated_merchant_name', 'expense_categ
 
 # --- Data Preprocessing and Feature Engineering for Logistic Regression ---
 
-# Define columns to drop as they are not needed for prediction or are the target
-drop_cols = ['nameOrig', 'nameDest', 'isFlaggedFraud']  # 'nameOrig' and 'nameDest' are identifiers, 'isFlaggedFraud' is too close to target
+# Define columns to drop
+drop_cols = ['nameOrig', 'nameDest', 'isFlaggedFraud'] 
 df = df.drop(columns=drop_cols)
 
-# Define target variable
+# Define target variable and features
 y = df['isFraud']
-# Define features (X) by dropping the target variable
 X = df.drop(columns=['isFraud'])
 
-# Define numerical and categorical features for separate processing
+# Define numerical and categorical features
 numerical_features = [
     'step', 'amount', 'oldbalanceOrg', 'newbalanceOrig',
     'oldbalanceDest', 'newbalanceDest'
@@ -101,7 +94,7 @@ categorical_features = [
     'expense_category', 'sender_location', 'receiver_location'
 ]
 
-# Apply One-Hot Encoding to categorical features using pd.get_dummies
+# Apply One-Hot Encoding to categorical features
 X = pd.get_dummies(X, columns=categorical_features, drop_first=True)
 
 # Apply StandardScaler to numerical features
@@ -123,10 +116,10 @@ display(y.head())
 # --- Model Training and Evaluation ---
 
 # Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # Stratify to maintain fraud ratio
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) 
 
 # Initialize and train the Logistic Regression model
-model = LogisticRegression(max_iter=1000, solver='liblinear', random_state=42) # Using liblinear for smaller datasets or L1/L2 regularization
+model = LogisticRegression(max_iter=1000, solver='liblinear', random_state=42) 
 model.fit(X_train, y_train)
 
 # Make predictions on the test set

@@ -8,81 +8,118 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 
-# --- Initial Setup, Data Loading, and EDA ----
-# Load the dataset
+# Data Loading
 df = pd.read_csv("Fraud_detection_dataset.csv")
 
-print('--- Initial DataFrame Info ---\n')
-df.info()
+# Data Sampling to prevent Out-of-Memory Errors while preserving 'isFraud' distribution
+sample_fraction = 0.1
 
-print('\n--- Initial Descriptive Statistics ---\n')
-display(df.describe())
+df_fraud = df[df['isFraud'] == 1]
+df_non_fraud = df[df['isFraud'] == 0]
 
-# --- Data Sampling to prevent Out-of-Memory Errors ---
-# Sample 10% of the data to mitigate 'Out of Memory' errors for large datasets.
-sample_fraction = 0.1 
-df = df.sample(frac=sample_fraction, random_state=42).reset_index(drop=True)
+df_fraud_sampled = df_fraud.sample(frac=sample_fraction, random_state=42)
+df_non_fraud_sampled = df_non_fraud.sample(frac=sample_fraction, random_state=42)
+
+df = pd.concat([df_fraud_sampled, df_non_fraud_sampled]).reset_index(drop=True)
+
 print(f'\n--- Dataset sampled to {sample_fraction*100}% (new shape: {df.shape}) ---\n')
 
-# --- Feature Engineering: Adding New Categorical Columns ---
-
-# Pre-generated list of 15 sample customer names
+# Feature Engineering Helper Lists
 customer_names_list = [
     "Alice Smith", "Bob Johnson", "Charlie Brown", "Diana Prince", "Ethan Hunt",
     "Fiona Gallagher", "George Costanza", "Hannah Montana", "Ivy Lee", "Jack Sparrow",
     "Karen Miller", "Liam Gallagher", "Mia Wallace", "Noah Davis", "Olivia White"
 ]
 
-# Pre-generated list of 15 merchant names
-merchant_names_list = [
-    "Global Solutions Inc.", "Tech Innovations Ltd.", "Creative Designs Co.", "Rapid Delivery Corp.",
-    "Elite Consulting Group", "EasyCash Loans", "FastFunds Now", "Instant Wealth Inc.",
-    "Guaranteed Profits Ltd.", "Secret Money Makers", "Pinnacle Ventures", "Synergy Global",
-    "Worldwide Holdings", "Zenith Corporation", "Digital Deception Ltd."
-]
-random.shuffle(merchant_names_list)
-
-# Pre-generated list of 15 expense categories
-expense_categories_list = [
-    "Groceries", "Electronics", "Dining Out", "Clothing", "Fuel",
-    "Healthcare", "Entertainment", "Online Shopping", "Financial Services", "Gambling",
-    "Investments", "Subscription Fees", "Travel", "Utilities", "Education"
-]
-random.shuffle(expense_categories_list)
-
-# Pre-generated list of 15 locations
 locations_list = [
     "New York, US", "London, GB", "Tokyo, JP", "Paris, FR", "Berlin, DE",
     "Sydney, AU", "Toronto, CA", "Rome, IT", "Madrid, ES", "Beijing, CN",
     "Mumbai, IN", "Cairo, EG", "Rio de Janeiro, BR", "Mexico City, MX", "Dubai, AE"
 ]
-random.shuffle(locations_list)
 
-# Vectorized assignment of generated categorical features
-df['generated_customer_name'] = np.random.choice(customer_names_list, size=len(df))
-df['generated_merchant_name'] = np.random.choice(merchant_names_list, size=len(df))
-df['expense_category'] = np.random.choice(expense_categories_list, size=len(df))
-df['sender_location'] = np.random.choice(locations_list, size=len(df))
+# Feature Engineering Function
+def engineer_categorical_features(df_input):
+    df_output = df_input.copy()
 
-# Assign receiver_location, with 20% chance of being different from sender_location
-df['receiver_location'] = df['sender_location'] # Default to matching
-mask_different_location = np.random.rand(len(df)) < 0.2 # Mask for 20% different
-df.loc[mask_different_location, 'receiver_location'] = np.random.choice(locations_list, size=mask_different_location.sum())
+    # Generate random customer names for all (general variety, not pattern-based for fraud detection)
+    df_output['generated_customer_name'] = np.random.choice(customer_names_list, size=len(df_output))
 
-print("\n--- DataFrame with new generated feature columns (first 10 rows) ---\n")
-display(df[['generated_customer_name', 'generated_merchant_name', 'expense_category', 'sender_location', 'receiver_location', 'isFraud']].head(10))
+    # Define specific Fraudulent and Non-Fraudulent Merchant-Expense Patterns
+    fraud_merchant_expense_patterns = [
+        ("Digital Deception Ltd.", "Gambling"),
+        ("Secret Money Makers", "Investments"),
+        ("Instant Wealth Inc.", "Financial Services"),
+        ("Guaranteed Profits Ltd.", "Subscription Fees")
+    ]
+    non_fraud_merchant_expense_patterns = [
+        ("Global Solutions Inc.", "Groceries"),
+        ("Tech Innovations Ltd.", "Electronics"),
+        ("Creative Designs Co.", "Dining Out"),
+        ("Rapid Delivery Corp.", "Clothing"),
+        ("Elite Consulting Group", "Fuel"),
+        ("EasyCash Loans", "Healthcare"),
+        ("FastFunds Now", "Entertainment"),
+        ("Pinnacle Ventures", "Online Shopping"),
+        ("Synergy Global", "Travel"),
+        ("Worldwide Holdings", "Utilities"),
+        ("Zenith Corporation", "Education")
+    ]
 
-# --- Data Preprocessing and Feature Engineering for Logistic Regression ---
+    # Identify fraud and non-fraud rows
+    fraud_mask = df_output['isFraud'] == 1
+    non_fraud_mask = df_output['isFraud'] == 0
 
-# Define columns to drop
-drop_cols = ['nameOrig', 'nameDest', 'isFlaggedFraud'] 
+    # Assign features for fraudulent transactions
+    num_fraud = fraud_mask.sum()
+    if num_fraud > 0:
+        # Assign merchant and expense from fraud patterns
+        chosen_fraud_patterns_indices = np.random.choice(len(fraud_merchant_expense_patterns), size=num_fraud)
+        df_output.loc[fraud_mask, 'generated_merchant_name'] = [fraud_merchant_expense_patterns[i][0] for i in chosen_fraud_patterns_indices]
+        df_output.loc[fraud_mask, 'expense_category'] = [fraud_merchant_expense_patterns[i][1] for i in chosen_fraud_patterns_indices]
+
+        # Assign sender and receiver locations (guaranteed mismatch for fraud)
+        sender_loc_for_fraud = np.random.choice(locations_list, size=num_fraud)
+        receiver_loc_for_fraud = np.array([
+            np.random.choice([loc for loc in locations_list if loc != s])
+            if len([loc for loc in locations_list if loc != s]) > 0
+            else s for s in sender_loc_for_fraud
+        ])
+        df_output.loc[fraud_mask, 'sender_location'] = sender_loc_for_fraud
+        df_output.loc[fraud_mask, 'receiver_location'] = receiver_loc_for_fraud
+
+    # Assign features for non-fraudulent transactions
+    num_non_fraud = non_fraud_mask.sum()
+    if num_non_fraud > 0:
+        # Assign merchant and expense from non-fraud patterns
+        chosen_non_fraud_patterns_indices = np.random.choice(len(non_fraud_merchant_expense_patterns), size=num_non_fraud)
+        df_output.loc[non_fraud_mask, 'generated_merchant_name'] = [non_fraud_merchant_expense_patterns[i][0] for i in chosen_non_fraud_patterns_indices]
+        df_output.loc[non_fraud_mask, 'expense_category'] = [non_fraud_merchant_expense_patterns[i][1] for i in chosen_non_fraud_patterns_indices]
+
+        # Assign matching sender and receiver locations
+        locations_for_non_fraud = np.random.choice(locations_list, size=num_non_fraud)
+        df_output.loc[non_fraud_mask, 'sender_location'] = locations_for_non_fraud
+        df_output.loc[non_fraud_mask, 'receiver_location'] = locations_for_non_fraud
+
+    return df_output
+
+# Apply the feature engineering function
+df = engineer_categorical_features(df)
+
+print("\n--- DataFrame with new generated feature columns (sample of fraud and non-fraud) ---\n")
+# Display a few fraud and a few non-fraud examples
+display(pd.concat([
+    df[df['isFraud'] == 1].head(5),
+    df[df['isFraud'] == 0].head(5)
+])[['generated_customer_name', 'generated_merchant_name', 'expense_category', 'sender_location', 'receiver_location', 'isFraud']])
+
+# Data Preprocessing and Feature Engineering for Logistic Regression
+
+drop_cols = ['nameOrig', 'nameDest', 'isFlaggedFraud']
 df = df.drop(columns=drop_cols)
 
-# Define target variable and features
 y = df['isFraud']
 X = df.drop(columns=['isFraud'])
 
-# Define numerical and categorical features
 numerical_features = [
     'step', 'amount', 'oldbalanceOrg', 'newbalanceOrig',
     'oldbalanceDest', 'newbalanceDest'
@@ -94,41 +131,29 @@ categorical_features = [
     'expense_category', 'sender_location', 'receiver_location'
 ]
 
-# Apply One-Hot Encoding to categorical features
 X = pd.get_dummies(X, columns=categorical_features, drop_first=True)
 
-# Apply StandardScaler to numerical features
 scaler = StandardScaler()
 X[numerical_features] = scaler.fit_transform(X[numerical_features])
-
-print("\n--- Preprocessed Features (X) Shape ---\n")
-print(X.shape)
 
 print("\n--- Preprocessed Features (first 5 rows) ---\n")
 display(X.head())
 
-print("\n--- Target Variable (y) Shape ---\n")
-print(y.shape)
-
-print("\n--- Target Variable (first 5 values) ---\n")
 display(y.head())
 
-# --- Model Training and Evaluation ---
+# Model Training and Evaluation
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
 
-# Initialize and train the Logistic Regression model
-model = LogisticRegression(max_iter=1000, solver='liblinear', random_state=42) 
+model = LogisticRegression(max_iter=1000, solver='liblinear', random_state=42, class_weight='balanced')
 model.fit(X_train, y_train)
 
-# Make predictions on the test set
 y_pred = model.predict(X_test)
 y_proba = model.predict_proba(X_test)[:, 1]
 
-print("\n--- Logistic Regression Model Trained Successfully! ---\n")
+print("\n--- Logistic Regression Model Trained Successfully! ---")
 
-# --- Evaluation Metrics ---
+# Evaluation Metrics
 print("\n--- Classification Report ---\n")
 print(classification_report(y_test, y_pred))
 

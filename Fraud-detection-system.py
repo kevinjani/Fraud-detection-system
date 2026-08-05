@@ -53,10 +53,19 @@ df.loc[df.index[:15], 'receiver_location'] = receiver_location[:15]
 # Drop the original nameOrig, nameDest, and isFlaggedFraud columns
 df = df.drop(columns=['nameOrig', 'nameDest', 'isFlaggedFraud'])
 
+# Rename columns as requested
+df = df.rename(columns={
+    'type': 'transaction_type',
+    'oldbalanceOrg': 'customer_old_balance',
+    'newbalanceOrig': 'customer_new_balance',
+    'oldbalanceDest': 'receiver_old_balance',
+    'newbalanceDest': 'receiver_new_balance'
+})
+
 # Define the new desired column order to place the new columns
 new_column_order = [
-    'step', 'type', 'amount', 'customer_name', 'merchant_name', 'receiver_location',
-    'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest', 'isFraud'
+    'transaction_type', 'amount', 'customer_name','customer_old_balance', 'customer_new_balance',
+    'merchant_name', 'receiver_old_balance', 'receiver_new_balance', 'receiver_location', 'isFraud'
 ]
 
 # Reindex the DataFrame to set the new column order
@@ -69,12 +78,12 @@ y = df['isFraud']
 X = df.drop(columns=['isFraud', 'customer_name', 'merchant_name', 'receiver_location'])
 
 numerical_features = [
-    'step', 'amount', 'oldbalanceOrg', 'newbalanceOrig',
-    'oldbalanceDest', 'newbalanceDest'
+    'amount', 'customer_old_balance', 'customer_new_balance',
+    'receiver_old_balance', 'receiver_new_balance'
 ]
 
 categorical_features = [
-    'type'
+    'transaction_type'
 ]
 
 X = pd.get_dummies(X, columns=categorical_features, drop_first=True)
